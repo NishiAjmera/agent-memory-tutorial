@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent Memory — 6 Levels</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+
+    --l1: #3fb950; /* green  - session */
+    --l2: #d2a8ff; /* purple - multi-agent */
+    --l3: #ffa657; /* orange - persistence */
+    --l4: #ff7b72; /* red    - callbacks */
+    --l5: #79c0ff; /* blue   - custom tools */
+    --l6: #f78166; /* coral  - multimodal */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 { font-size: 18px; font-weight: 600; color: var(--text); }
+  header p  { font-size: 13px; color: var(--muted); }
+  .google-badge {
+    margin-left: auto;
+    background: #1f2937;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* ── Level Nav ── */
+  nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+  }
+  nav button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    padding: 12px 18px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color .15s, border-color .15s;
+  }
+  nav button:hover { color: var(--text); }
+  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+  nav button .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+
+  /* ── Main layout ── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 0;
+    height: calc(100vh - 109px);
+    overflow: hidden;
+  }
+
+  /* ── Left panel: info ── */
+  .info-panel {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .level-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+    width: fit-content;
+  }
+  .level-title { font-size: 22px; font-weight: 700; }
+  .level-desc  { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+  /* ── Diagram ── */
+  .diagram {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .diagram svg { width: 100%; }
+
+  /* ── Concepts ── */
+  .concepts h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 8px; }
+  .concept-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .concept-item:last-child { border-bottom: none; }
+  .concept-item .icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .concept-item code {
+    background: #21262d;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: "SF Mono", Consolas, monospace;
+    color: var(--accent);
+  }
+
+  /* ── Right panel: demo ── */
+  .demo-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .demo-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .demo-header h2 { font-size: 14px; font-weight: 600; }
+  .demo-header p  { font-size: 12px; color: var(--muted); }
+
+  .demo-controls {
+    display: flex;
+    gap: 8px;
+  }
+  .btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .btn:hover { background: #21262d; }
+  .btn.primary {
+    border-color: var(--accent);
+    background: rgba(88, 166, 255, .1);
+    color: var(--accent);
+  }
+
+  /* ── Extra info panels (state viewer, etc.) ── */
+  .extra-pane {
+    border-top: 1px solid var(--border);
+    padding: 10px 16px;
+    background: #0d1117;
+    font-size: 11px;
+    font-family: "SF Mono", Consolas, monospace;
+    color: var(--muted);
+    max-height: 110px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .extra-pane .label { color: var(--accent); font-weight: 600; margin-bottom: 4px; font-family: sans-serif; font-size: 11px; }
+
+  /* ── Chat ── */
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .msg {
+    display: flex;
+    gap: 10px;
+    max-width: 85%;
+  }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .msg .avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .msg.user .avatar { background: rgba(88,166,255,.2); }
+  .msg.agent .avatar { background: #21262d; }
+  .msg .bubble {
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  .msg.user .bubble {
+    background: rgba(88,166,255,.15);
+    border: 1px solid rgba(88,166,255,.3);
+    border-top-right-radius: 2px;
+  }
+  .msg.agent .bubble {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top-left-radius: 2px;
+  }
+  .msg.agent.thinking .bubble { opacity: .5; }
+
+  .typing-dots span {
+    display: inline-block;
+    width: 5px; height: 5px;
+    background: var(--muted);
+    border-radius: 50%;
+    margin: 0 1px;
+    animation: bounce .8s infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: .2s; }
+  .typing-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+
+  /* ── Input ── */
+  .chat-input {
+    border-top: 1px solid var(--border);
+    padding: 14px 16px;
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .chat-input input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .chat-input input:focus { border-color: var(--accent); }
+  .chat-input button {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13px;
+    transition: opacity .15s;
+  }
+  .chat-input button:hover { opacity: .85; }
+  .chat-input button:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── Suggestions ── */
+  .suggestions {
+    padding: 0 16px 12px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .suggestion {
+    background: #21262d;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .suggestion:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ── Empty state ── */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--muted);
+  }
+  .empty-state .emoji { font-size: 36px; }
+  .empty-state p { font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🧠 Agent Memory — 6 Levels</h1>
+    <p>Google ADK · Interactive Walkthrough</p>
+  </div>
+  <div class="google-badge">google-adk · gemini-3.5-flash</div>
+</header>
+
+<nav id="levelNav"></nav>
+
+<main>
+  <div class="info-panel" id="infoPanel"></div>
+  <div class="demo-panel" id="demoPanel"></div>
+</main>
+
+<script>
+const LEVELS = [
+  {
+    id: 1,
+    name: "Session & State",
+    color: "#3fb950",
+    emoji: "💬",
+    tagline: "Short-term conversation memory within a session",
+    desc: "The foundation of agent memory. A Session object holds the full conversation history. By reusing the same session ID across turns, the agent avoids the 'Goldfish Problem' — forgetting what was said moments ago.",
+    concepts: [
+      { icon: "🗂️", text: "Session object holds the conversation history" },
+      { icon: "🔑", text: "Reuse session.id across turns to maintain context" },
+      { icon: "🐟", text: "Without this, agent resets every turn (Goldfish Problem)" },
+      { icon: "⚡", text: "Uses InMemorySessionService — fast but not persistent" },
+    ],
+    apiEndpoint: "/api/level1",
+    extraLabel: null,
+    extraKey: null,
+    suggestions: [
+      "My name is Alex and I love hiking.",
+      "What's my name?",
+      "What do I love doing?",
+      "Tell me a fact about my hobby.",
+    ],
+    diagramSvg: `<svg viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="10" width="80" height="36" rx="6" fill="#21262d" stroke="#3fb950" stroke-width="1.5"/>
+      <text x="50" y="33" text-anchor="middle" fill="#e6edf3" font-size="12">User Turn 1</text>
+      <rect x="10" y="84" width="80" height="36" rx="6" fill="#21262d" stroke="#3fb950" stroke-width="1.5"/>
+      <text x="50" y="107" text-anchor="middle" fill="#e6edf3" font-size="12">User Turn 2</text>
+      <rect x="120" y="47" width="90" height="36" rx="6" fill="#21262d" stroke="#3fb950" stroke-width="1.5"/>
+      <text x="165" y="63" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="bold">Session</text>
+      <text x="165" y="77" text-anchor="middle" fill="#8b949e" font-size="10">history[]</text>
+      <rect x="230" y="47" width="80" height="36" rx="6" fill="#21262d" stroke="#8b949e" stroke-width="1"/>
+      <text x="270" y="70" text-anchor="middle" fill="#e6edf3" font-size="12">Agent</text>
+      <line x1="90" y1="28" x2="120" y2="58" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="90" y1="102" x2="120" y2="72" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="210" y1="65" x2="230" y2="65" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr)"/>
+      <defs><marker id="arr" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8b949e"/></marker></defs>
+    </svg>`,
+  },
+  {
+    id: 2,
+    name: "Multi-Agent State",
+    color: "#d2a8ff",
+    emoji: "🤝",
+    tagline: "Shared scratchpad between multiple agents",
+    desc: "Multiple specialized agents collaborate through a shared state dictionary. One agent writes its findings to state using output_key; the next agent reads them via {placeholder} syntax in its prompt. Each agent does one job well.",
+    concepts: [
+      { icon: "📝", text: "State is a key-value scratchpad shared across all agents" },
+      { icon: "🔗", text: "output_key saves agent output into state automatically" },
+      { icon: "{}", text: "Placeholder syntax injects state into the next agent's prompt" },
+      { icon: "⛓️", text: "SequentialAgent chains agents in order" },
+    ],
+    apiEndpoint: "/api/level2",
+    extraLabel: "Shared State (research_notes)",
+    extraKey: "shared_state",
+    suggestions: [
+      "Explain how photosynthesis works.",
+      "Tell me about the Apollo 11 mission.",
+      "Summarize the water cycle.",
+    ],
+    diagramSvg: `<svg viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="47" width="75" height="36" rx="6" fill="#21262d" stroke="#d2a8ff" stroke-width="1.5"/>
+      <text x="47" y="63" text-anchor="middle" fill="#d2a8ff" font-size="11" font-weight="bold">Researcher</text>
+      <text x="47" y="77" text-anchor="middle" fill="#8b949e" font-size="10">Agent 1</text>
+      <rect x="120" y="47" width="80" height="36" rx="6" fill="#1a1f2e" stroke="#d2a8ff" stroke-width="1" stroke-dasharray="4"/>
+      <text x="160" y="63" text-anchor="middle" fill="#d2a8ff" font-size="10">state{}</text>
+      <text x="160" y="77" text-anchor="middle" fill="#8b949e" font-size="9">research_notes</text>
+      <rect x="225" y="47" width="80" height="36" rx="6" fill="#21262d" stroke="#d2a8ff" stroke-width="1.5"/>
+      <text x="265" y="63" text-anchor="middle" fill="#d2a8ff" font-size="11" font-weight="bold">Synthesizer</text>
+      <text x="265" y="77" text-anchor="middle" fill="#8b949e" font-size="10">Agent 2</text>
+      <line x1="85" y1="65" x2="120" y2="65" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <line x1="200" y1="65" x2="225" y2="65" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <text x="160" y="20" text-anchor="middle" fill="#8b949e" font-size="11">SequentialAgent pipeline</text>
+      <rect x="0" y="30" width="320" height="70" rx="8" fill="none" stroke="#30363d" stroke-width="1" stroke-dasharray="6"/>
+      <defs><marker id="arr2" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#d2a8ff"/></marker></defs>
+    </svg>`,
+  },
+  {
+    id: 3,
+    name: "Persistence",
+    color: "#ffa657",
+    emoji: "💾",
+    tagline: "Sessions that survive restarts — stored in a database",
+    desc: "Swap InMemorySessionService for DatabaseSessionService and conversations are written to SQLite (or any SQL DB). Restart the server and the agent still remembers everything. This unlocks true long-term user history.",
+    concepts: [
+      { icon: "🗄️", text: "DatabaseSessionService writes every turn to SQLite" },
+      { icon: "♻️", text: "Sessions survive process restarts" },
+      { icon: "🔍", text: "Historical context can be queried and analysed" },
+      { icon: "🔄", text: "Drop-in replacement — same API as InMemory" },
+    ],
+    apiEndpoint: "/api/level3",
+    extraLabel: "DB File",
+    extraKey: "db_file",
+    suggestions: [
+      "Remember that my favourite color is indigo.",
+      "My dog's name is Biscuit.",
+      "What have I told you so far?",
+    ],
+    diagramSvg: `<svg viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="47" width="70" height="36" rx="6" fill="#21262d" stroke="#8b949e" stroke-width="1"/>
+      <text x="45" y="70" text-anchor="middle" fill="#e6edf3" font-size="12">Agent</text>
+      <rect x="110" y="47" width="100" height="36" rx="6" fill="#21262d" stroke="#ffa657" stroke-width="1.5"/>
+      <text x="160" y="63" text-anchor="middle" fill="#ffa657" font-size="11" font-weight="bold">DatabaseSession</text>
+      <text x="160" y="77" text-anchor="middle" fill="#8b949e" font-size="10">Service</text>
+      <rect x="235" y="15" width="75" height="100" rx="6" fill="#1a1f2e" stroke="#ffa657" stroke-width="1.5"/>
+      <text x="272" y="50" text-anchor="middle" fill="#ffa657" font-size="11" font-weight="bold">SQLite</text>
+      <text x="272" y="65" text-anchor="middle" fill="#8b949e" font-size="10">sessions</text>
+      <text x="272" y="79" text-anchor="middle" fill="#8b949e" font-size="10">turns</text>
+      <text x="272" y="93" text-anchor="middle" fill="#8b949e" font-size="10">state</text>
+      <text x="272" y="107" text-anchor="middle" fill="#8b949e" font-size="9">persists ✓</text>
+      <line x1="80" y1="65" x2="110" y2="65" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr3)"/>
+      <line x1="210" y1="65" x2="235" y2="65" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arr3)"/>
+      <defs><marker id="arr3" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#ffa657"/></marker></defs>
+    </svg>`,
+  },
+  {
+    id: 4,
+    name: "Callbacks",
+    color: "#ff7b72",
+    emoji: "⚡",
+    tagline: "Automatic state updates triggered by agent actions",
+    desc: "Callbacks are functions that fire automatically at key moments (before/after model calls, tool calls, or agent turns). They let you update state, log activity, or even modify agent behaviour — all without the agent explicitly doing anything.",
+    concepts: [
+      { icon: "🎣", text: "after_agent_callback fires after every agent turn" },
+      { icon: "🔧", text: "CallbackContext gives access to session state" },
+      { icon: "📊", text: "Perfect for telemetry, logging, guardrails" },
+      { icon: "🚦", text: "Return Content from callback to override agent response" },
+    ],
+    apiEndpoint: "/api/level4",
+    extraLabel: "Callback Log (last 5 events)",
+    extraKey: "callback_log",
+    suggestions: [
+      "What is the capital of France?",
+      "Tell me a short joke.",
+      "What's 2 + 2?",
+    ],
+    diagramSvg: `<svg viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="47" width="70" height="36" rx="6" fill="#21262d" stroke="#8b949e" stroke-width="1"/>
+      <text x="45" y="70" text-anchor="middle" fill="#e6edf3" font-size="12">User</text>
+      <rect x="110" y="47" width="70" height="36" rx="6" fill="#21262d" stroke="#8b949e" stroke-width="1"/>
+      <text x="145" y="70" text-anchor="middle" fill="#e6edf3" font-size="12">Agent</text>
+      <rect x="200" y="10" width="110" height="30" rx="6" fill="#21262d" stroke="#ff7b72" stroke-width="1.5"/>
+      <text x="255" y="30" text-anchor="middle" fill="#ff7b72" font-size="11" font-weight="bold">after_agent_callback</text>
+      <rect x="200" y="90" width="110" height="30" rx="6" fill="#21262d" stroke="#ff7b72" stroke-width="1.5"/>
+      <text x="255" y="110" text-anchor="middle" fill="#ff7b72" font-size="11" font-weight="bold">state / log update</text>
+      <line x1="80" y1="65" x2="110" y2="65" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr4)"/>
+      <line x1="180" y1="55" x2="200" y2="30" stroke="#ff7b72" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arr4r)"/>
+      <line x1="255" y1="40" x2="255" y2="90" stroke="#ff7b72" stroke-width="1.5" marker-end="url(#arr4r)"/>
+      <defs>
+        <marker id="arr4" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8b949e"/></marker>
+        <marker id="arr4r" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#ff7b72"/></marker>
+      </defs>
+    </svg>`,
+  },
+  {
+    id: 5,
+    name: "Custom Tools",
+    color: "#79c0ff",
+    emoji: "🛠️",
+    tagline: "Structured read/write memory the agent controls",
+    desc: "Give the agent explicit tools to read and write a structured memory store (a database, JSON file, etc.). The agent decides when to call recall_user_preferences or save_user_preferences, giving you schema-based, auditable memory.",
+    concepts: [
+      { icon: "📖", text: "recall_user_preferences — agent reads from memory store" },
+      { icon: "✍️", text: "save_user_preferences — agent writes structured data" },
+      { icon: "🗃️", text: "ToolContext lets tools access and modify session state" },
+      { icon: "🧩", text: "FunctionTool wraps any Python function as an agent tool" },
+    ],
+    apiEndpoint: "/api/level5",
+    extraLabel: "Memory Store (persisted preferences)",
+    extraKey: "memory_store",
+    suggestions: [
+      "My name is Jordan and I prefer dark mode.",
+      "I drink oat milk lattes every morning.",
+      "What do you know about me?",
+      "What's my coffee preference?",
+    ],
+    diagramSvg: `<svg viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="47" width="70" height="36" rx="6" fill="#21262d" stroke="#8b949e" stroke-width="1"/>
+      <text x="45" y="70" text-anchor="middle" fill="#e6edf3" font-size="12">User</text>
+      <rect x="110" y="47" width="70" height="36" rx="6" fill="#21262d" stroke="#79c0ff" stroke-width="1.5"/>
+      <text x="145" y="70" text-anchor="middle" fill="#79c0ff" font-size="12" font-weight="bold">Agent</text>
+      <rect x="205" y="10" width="105" height="30" rx="6" fill="#21262d" stroke="#79c0ff" stroke-width="1.5"/>
+      <text x="257" y="30" text-anchor="middle" fill="#79c0ff" font-size="10" font-weight="bold">recall_preferences</text>
+      <rect x="205" y="90" width="105" height="30" rx="6" fill="#21262d" stroke="#79c0ff" stroke-width="1.5"/>
+      <text x="257" y="110" text-anchor="middle" fill="#79c0ff" font-size="10" font-weight="bold">save_preferences</text>
+      <rect x="225" y="47" width="65" height="26" rx="4" fill="#1a1f2e" stroke="#30363d" stroke-width="1"/>
+      <text x="257" y="64" text-anchor="middle" fill="#8b949e" font-size="10">Memory DB</text>
+      <line x1="80" y1="65" x2="110" y2="65" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr5)"/>
+      <line x1="180" y1="55" x2="205" y2="30" stroke="#79c0ff" stroke-width="1" stroke-dasharray="3" marker-end="url(#arr5b)"/>
+      <line x1="180" y1="75" x2="205" y2="98" stroke="#79c0ff" stroke-width="1" stroke-dasharray="3" marker-end="url(#arr5b)"/>
+      <line x1="257" y1="40" x2="257" y2="47" stroke="#30363d" stroke-width="1"/>
+      <line x1="257" y1="73" x2="257" y2="90" stroke="#30363d" stroke-width="1"/>
+      <defs>
+        <marker id="arr5" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8b949e"/></marker>
+        <marker id="arr5b" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#79c0ff"/></marker>
+      </defs>
+    </svg>`,
+  },
+  {
+    id: 6,
+    name: "Multimodal Memory",
+    color: "#f78166",
+    emoji: "🌐",
+    tagline: "Text, images, video & audio in a unified searchable store",
+    desc: "The most advanced level. VertexAiMemoryBankService stores and retrieves across modalities using similarity search. PreloadMemoryTool automatically injects past relevant experiences into the agent's context before each turn.",
+    concepts: [
+      { icon: "🧩", text: "VertexAiMemoryBankService — unified multimodal store" },
+      { icon: "🔍", text: "Similarity search retrieves contextually relevant memories" },
+      { icon: "💉", text: "PreloadMemoryTool auto-injects past experiences as context" },
+      { icon: "📁", text: "Custom memory topics organize different content types" },
+    ],
+    apiEndpoint: "/api/level6",
+    extraLabel: "Memory Bank (stored entries)",
+    extraKey: "memory_bank",
+    suggestions: [
+      "I just watched a video about coral reefs.",
+      "I have an image of the Eiffel Tower from my trip.",
+      "What multimodal memories do you have?",
+      "Tell me about the reef video.",
+    ],
+    diagramSvg: `<svg viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="47" width="70" height="36" rx="6" fill="#21262d" stroke="#8b949e" stroke-width="1"/>
+      <text x="45" y="65" text-anchor="middle" fill="#e6edf3" font-size="11">Text/Image</text>
+      <text x="45" y="78" text-anchor="middle" fill="#8b949e" font-size="10">Video/Audio</text>
+      <rect x="105" y="47" width="80" height="36" rx="6" fill="#21262d" stroke="#f78166" stroke-width="1.5"/>
+      <text x="145" y="63" text-anchor="middle" fill="#f78166" font-size="10" font-weight="bold">MemoryBank</text>
+      <text x="145" y="77" text-anchor="middle" fill="#8b949e" font-size="9">similarity search</text>
+      <rect x="210" y="10" width="100" height="25" rx="5" fill="#21262d" stroke="#f78166" stroke-width="1.5"/>
+      <text x="260" y="27" text-anchor="middle" fill="#f78166" font-size="10">PreloadMemoryTool</text>
+      <rect x="210" y="95" width="100" height="25" rx="5" fill="#21262d" stroke="#f78166" stroke-width="1.5"/>
+      <text x="260" y="112" text-anchor="middle" fill="#f78166" font-size="10">Agent + Context</text>
+      <line x1="80" y1="65" x2="105" y2="65" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr6)"/>
+      <line x1="185" y1="55" x2="210" y2="28" stroke="#f78166" stroke-width="1" stroke-dasharray="3" marker-end="url(#arr6b)"/>
+      <line x1="185" y1="75" x2="210" y2="105" stroke="#f78166" stroke-width="1" stroke-dasharray="3" marker-end="url(#arr6b)"/>
+      <defs>
+        <marker id="arr6" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8b949e"/></marker>
+        <marker id="arr6b" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f78166"/></marker>
+      </defs>
+    </svg>`,
+  },
+];
+
+let currentLevel = 0;
+let chatHistories = LEVELS.map(() => []);
+const USER_ID = "demo_user_" + Math.random().toString(36).slice(2, 8);
+
+function renderNav() {
+  const nav = document.getElementById("levelNav");
+  nav.innerHTML = LEVELS.map((l, i) => `
+    <button class="${i === currentLevel ? "active" : ""}" onclick="switchLevel(${i})">
+      <span class="dot" style="background:${l.color}"></span>
+      ${l.id}. ${l.name}
+    </button>
+  `).join("");
+}
+
+function renderInfo(l) {
+  document.getElementById("infoPanel").innerHTML = `
+    <div>
+      <div class="level-badge" style="color:${l.color};border-color:${l.color};background:${l.color}18">
+        ${l.emoji} Level ${l.id}
+      </div>
+      <div style="margin-top:10px" class="level-title">${l.name}</div>
+      <div style="margin-top:6px;font-size:13px;color:${l.color}">${l.tagline}</div>
+    </div>
+
+    <div class="diagram">${l.diagramSvg}</div>
+
+    <p class="level-desc">${l.desc}</p>
+
+    <div class="concepts">
+      <h3>Key Concepts</h3>
+      ${l.concepts.map(c => `
+        <div class="concept-item">
+          <span class="icon">${c.icon}</span>
+          <span>${c.text}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderDemo(l, idx) {
+  const panel = document.getElementById("demoPanel");
+  const msgs = chatHistories[idx];
+
+  const extraHtml = l.extraLabel ? `
+    <div class="extra-pane" id="extraPane">
+      <div class="label">${l.extraLabel}</div>
+      <span id="extraContent" style="color:#8b949e">—</span>
+    </div>` : "";
+
+  const msgsHtml = msgs.length === 0
+    ? `<div class="empty-state">
+        <div class="emoji">${l.emoji}</div>
+        <p>Try one of the suggestions below to demo <strong>${l.name}</strong></p>
+      </div>`
+    : msgs.map(m => `
+      <div class="msg ${m.role}">
+        <div class="avatar">${m.role === "user" ? "👤" : "🤖"}</div>
+        <div class="bubble ${m.thinking ? "thinking" : ""}">
+          ${m.thinking ? `<div class="typing-dots"><span></span><span></span><span></span></div>` : escapeHtml(m.text)}
+        </div>
+      </div>
+    `).join("");
+
+  panel.innerHTML = `
+    <div class="demo-header">
+      <div>
+        <h2>Live Demo — Level ${l.id}: ${l.name}</h2>
+        <p>Powered by google-adk + gemini-3.5-flash</p>
+      </div>
+      <div class="demo-controls">
+        <button class="btn" onclick="resetChat(${idx})">↺ Reset</button>
+      </div>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">${msgsHtml}</div>
+
+    ${extraHtml}
+
+    <div class="suggestions">
+      ${l.suggestions.map(s => `<div class="suggestion" onclick="fillInput(${JSON.stringify(s)})">${s}</div>`).join("")}
+    </div>
+
+    <div class="chat-input">
+      <input id="chatInput" type="text" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendMsg(${idx})" />
+      <button id="sendBtn" onclick="sendMsg(${idx})">Send</button>
+    </div>
+  `;
+  scrollToBottom();
+}
+
+function render() {
+  const l = LEVELS[currentLevel];
+  renderNav();
+  renderInfo(l);
+  renderDemo(l, currentLevel);
+}
+
+function switchLevel(idx) {
+  currentLevel = idx;
+  render();
+}
+
+function fillInput(text) {
+  document.getElementById("chatInput").value = text;
+  document.getElementById("chatInput").focus();
+}
+
+function scrollToBottom() {
+  setTimeout(() => {
+    const el = document.getElementById("chatMessages");
+    if (el) el.scrollTop = el.scrollHeight;
+  }, 50);
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function updateExtra(data) {
+  const el = document.getElementById("extraContent");
+  if (!el) return;
+  const l = LEVELS[currentLevel];
+  if (!l.extraKey) return;
+  const val = data[l.extraKey];
+  if (!val) return;
+  if (typeof val === "object") {
+    el.textContent = JSON.stringify(val, null, 2);
+  } else if (Array.isArray(val) && val.length === 0) {
+    el.textContent = "(empty)";
+  } else {
+    el.textContent = typeof val === "string" ? val : JSON.stringify(val);
+  }
+}
+
+async function sendMsg(idx) {
+  const input = document.getElementById("chatInput");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+
+  const l = LEVELS[idx];
+  chatHistories[idx].push({ role: "user", text });
+  chatHistories[idx].push({ role: "agent", text: "", thinking: true });
+
+  const sendBtn = document.getElementById("sendBtn");
+  if (sendBtn) sendBtn.disabled = true;
+
+  renderDemo(l, idx);
+
+  try {
+    const res = await fetch(l.apiEndpoint + "/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, user_id: USER_ID }),
+    });
+    const data = await res.json();
+
+    // Remove thinking bubble
+    chatHistories[idx].pop();
+    chatHistories[idx].push({ role: "agent", text: data.reply || data.error || "(no response)" });
+
+    renderDemo(l, idx);
+    updateExtra(data);
+  } catch (err) {
+    chatHistories[idx].pop();
+    chatHistories[idx].push({ role: "agent", text: "Error: " + err.message });
+    renderDemo(l, idx);
+  }
+}
+
+async function resetChat(idx) {
+  const l = LEVELS[idx];
+  chatHistories[idx] = [];
+  try {
+    await fetch(l.apiEndpoint + "/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: USER_ID }),
+    });
+  } catch (_) {}
+  renderDemo(l, idx);
+}
+
+render();
+</script>
+</body>
+</html>
